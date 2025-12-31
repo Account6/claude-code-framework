@@ -56,7 +56,14 @@ Knowledge resources that agents reference for domain expertise. Skills are not d
 | [monorepo-turborepo](templates/monorepo-turborepo/) | Turborepo monorepo |
 | [astro-static](templates/astro-static/) | Astro content site |
 
-### 🛠️ Operations
+### �️ Security (NEW)
+| Skill | Description |
+|-------|-------------|
+| vulnerability-scanner | 🆕 DAST, SAST, SCA tools, CI/CD integration |
+| red-team-tactics | 🆕 MITRE ATT&CK, exploitation, lateral movement |
+| api-security-testing | 🆕 OWASP API Top 10, JWT, OAuth, GraphQL |
+
+### �🛠️ Operations
 | Skill | Description |
 |-------|-------------|
 | server-management | Server administration |
@@ -84,4 +91,4 @@ skills/
         └── TEMPLATE.md
 ```
 
-## Total: 37 Skills
+## Total: 40 Skills (+3 Security)
