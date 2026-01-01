@@ -503,13 +503,44 @@ def scan_file_dependencies(project_path: str, max_files: int = 200) -> tuple:
             try:
                 content = file_path.read_text(encoding='utf-8', errors='ignore')
                 rel_path = str(file_path.relative_to(root))
+                ext = file_path.suffix.lower()
                 
-                # Extract imports (JS/TS)
-                imports = re.findall(r"from\s+['\"]([^'\"]+)['\"]", content)
-                imports += re.findall(r"require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)", content)
+                local_imports = []
                 
-                # Track local imports for reverse deps
-                local_imports = [imp for imp in imports if imp.startswith('.') or imp.startswith('@/')]
+                # Extract imports based on file type
+                if ext in {'.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.vue', '.svelte'}:
+                    # JS/TS imports
+                    imports = re.findall(r"from\s+['\"]([^'\"]+)['\"]", content)
+                    imports += re.findall(r"require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)", content)
+                    # Track local imports
+                    local_imports = [imp for imp in imports if imp.startswith('.') or imp.startswith('@/')]
+                    
+                elif ext == '.py':
+                    # Python relative imports: from .module import X, from ..package import Y
+                    py_relative = re.findall(r"from\s+(\.+\w*(?:\.\w+)*)\s+import", content)
+                    # Python absolute local imports: from mypackage.module import X
+                    py_absolute = re.findall(r"from\s+(\w+(?:\.\w+)+)\s+import", content)
+                    # Simple imports: import mymodule
+                    py_simple = re.findall(r"^import\s+(\w+(?:\.\w+)*)", content, re.MULTILINE)
+                    
+                    # Filter to likely local imports (not standard library)
+                    stdlib = {'os', 'sys', 'json', 're', 'typing', 'pathlib', 'datetime', 'collections', 
+                              'functools', 'itertools', 'math', 'random', 'subprocess', 'threading',
+                              'argparse', 'logging', 'unittest', 'io', 'time', 'copy', 'shutil', 'platform'}
+                    
+                    for imp in py_relative:
+                        # Convert . and .. to relative path style
+                        if imp.startswith('..'):
+                            local_imports.append(imp)  # Keep as-is for resolution
+                        elif imp.startswith('.'):
+                            local_imports.append(imp)
+                    
+                    for imp in py_absolute + py_simple:
+                        # Skip standard library
+                        root_module = imp.split('.')[0]
+                        if root_module not in stdlib and not root_module.startswith('_'):
+                            local_imports.append(imp)
+                
                 if local_imports:
                     file_imports[rel_path] = local_imports
                 
@@ -538,7 +569,7 @@ def scan_file_dependencies(project_path: str, max_files: int = 200) -> tuple:
             """Resolve import path to actual file path.
             
             Args:
-                imp: The import path (e.g., './types', '../shared/api', '@/utils')
+                imp: The import path (e.g., './types', '../shared/api', '@/utils', '.module')
                 importing_file: The file doing the import (e.g., 'src/content/content.ts')
             """
             # Handle @/ alias (common in React/Next.js projects)
@@ -547,19 +578,40 @@ def scan_file_dependencies(project_path: str, max_files: int = 200) -> tuple:
             elif imp.startswith('~/'):
                 resolved = imp[2:]  # ~/utils -> utils
             elif imp.startswith('./') or imp.startswith('../'):
-                # Resolve relative path based on importing file's directory
+                # JS/TS relative path
                 import_dir = str(Path(importing_file).parent)
-                # Combine paths
                 combined = os.path.join(import_dir, imp)
-                # Normalize the path (resolve .. and .)
                 normalized = os.path.normpath(combined)
-                # Convert to forward slashes for consistency
                 resolved = normalized.replace('\\', '/')
-                # Clean up any leading ./
                 if resolved.startswith('./'):
                     resolved = resolved[2:]
+            elif imp.startswith('.'):
+                # Python relative import: .module or ..package.module
+                import_dir = str(Path(importing_file).parent)
+                # Count leading dots
+                dots = 0
+                for c in imp:
+                    if c == '.':
+                        dots += 1
+                    else:
+                        break
+                # Get the module part after dots
+                module_part = imp[dots:]
+                # Convert dots to parent directory traversal
+                if dots == 1:
+                    # Same directory: .module -> ./module
+                    rel_path = './' + module_part.replace('.', '/')
+                else:
+                    # Parent directories: ..module -> ../module, ...module -> ../../module
+                    parents = '../' * (dots - 1)
+                    rel_path = parents + module_part.replace('.', '/')
+                
+                combined = os.path.join(import_dir, rel_path)
+                normalized = os.path.normpath(combined)
+                resolved = normalized.replace('\\', '/')
             else:
-                resolved = imp
+                # Python absolute import: convert dots to slashes
+                resolved = imp.replace('.', '/')
             
             return resolved
         
