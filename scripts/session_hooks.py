@@ -534,24 +534,39 @@ def scan_file_dependencies(project_path: str, max_files: int = 200) -> tuple:
         reverse_deps = {}  # Maps resolved path to list of importing files
         import_counts = {}
         
-        def resolve_import_alias(imp: str) -> str:
-            """Resolve import path aliases to actual paths."""
+        def resolve_import_path(imp: str, importing_file: str) -> str:
+            """Resolve import path to actual file path.
+            
+            Args:
+                imp: The import path (e.g., './types', '../shared/api', '@/utils')
+                importing_file: The file doing the import (e.g., 'src/content/content.ts')
+            """
             # Handle @/ alias (common in React/Next.js projects)
             if imp.startswith('@/'):
                 resolved = 'src/' + imp[2:]  # @/constants -> src/constants
             elif imp.startswith('~/'):
                 resolved = imp[2:]  # ~/utils -> utils
+            elif imp.startswith('./') or imp.startswith('../'):
+                # Resolve relative path based on importing file's directory
+                import_dir = str(Path(importing_file).parent)
+                # Combine paths
+                combined = os.path.join(import_dir, imp)
+                # Normalize the path (resolve .. and .)
+                normalized = os.path.normpath(combined)
+                # Convert to forward slashes for consistency
+                resolved = normalized.replace('\\', '/')
+                # Clean up any leading ./
+                if resolved.startswith('./'):
+                    resolved = resolved[2:]
             else:
                 resolved = imp
             
-            # Add index.ts/.tsx if path looks like a directory
-            # e.g., src/constants -> src/constants/index.ts
             return resolved
         
         for importing_file, imports in file_imports.items():
             for imp in imports:
-                # Resolve alias to actual path
-                resolved_path = resolve_import_alias(imp)
+                # Resolve path using importing file's location
+                resolved_path = resolve_import_path(imp, importing_file)
                 
                 # Store both original and resolved for matching
                 if resolved_path not in reverse_deps:
@@ -565,9 +580,9 @@ def scan_file_dependencies(project_path: str, max_files: int = 200) -> tuple:
                         reverse_deps[index_path] = []
                     reverse_deps[index_path].append(importing_file)
                 
-                if imp not in import_counts:
-                    import_counts[imp] = 0
-                import_counts[imp] += 1
+                if resolved_path not in import_counts:
+                    import_counts[resolved_path] = 0
+                import_counts[resolved_path] += 1
         
         # Get top 5 most imported for summary
         sorted_imports = sorted(import_counts.items(), key=lambda x: x[1], reverse=True)[:5]
