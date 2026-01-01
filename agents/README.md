@@ -21,6 +21,7 @@ Specialized AI agents for different development domains. Each agent has specific
 | [project-planner](project-planner.md) | 140 | Task breakdown, planning |
 | [performance-optimizer](performance-optimizer.md) | 132 | Performance profiling |
 | [documentation-writer](documentation-writer.md) | 98 | Documentation, API docs |
+| [seo-specialist](seo-specialist.md) | 110 | 🆕 SEO, GEO, Core Web Vitals, AI citations |
 
 
 ## Agent Format
